@@ -1,0 +1,6 @@
+/*
+$ScoreMetaInfo
+*/
+__code unsigned char Score[$ScoreDataLen] ={
+$ScoreData
+};
