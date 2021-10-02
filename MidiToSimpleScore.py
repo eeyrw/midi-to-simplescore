@@ -184,7 +184,7 @@ def main():
     parser.add_argument('--lowerBoundNote', type=int, default=0,
                         help='Min midi note which target device can support.')
     parser.add_argument('--voiceCenterNote', type=int, default=noteNameValueMap['C:4'],
-                        help='Center note of target voice.')
+                        help='Center note of target voice. P.S: C4=60')
     parser.add_argument('--tickPerSecond', type=int, default=125,
                         help='Ticks per second on target device.')
     parser.add_argument('--outputDir', type=str, default='.',
