@@ -1,0 +1,11 @@
+/*
+$ScoreMetaInfo
+*/
+#ifdef __AVR_ARCH__
+#include <avr/pgmspace.h>
+const unsigned char Score[] PROGMEM ={
+#else
+const unsigned char Score[]={
+#endif
+$ScoreData
+};
