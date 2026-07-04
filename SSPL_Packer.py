@@ -44,8 +44,10 @@ def build_sspl(midi_files, voiceCenterNote=60, lowerBoundNote=0,
                                        voiceCenterNote, lowerBoundNote, upperBoundNote)
 
         afterVoiceCentroid = centroid + voiceTranspose
+        afterVoiceLowest   = lowest  + voiceTranspose
+        afterVoiceHighest  = highest + voiceTranspose
         encodingTranspose = calcEncodingTranspose(
-            afterVoiceCentroid, 0, 61)
+            afterVoiceCentroid, afterVoiceLowest, afterVoiceHighest)
 
         totalTranspose = voiceTranspose + encodingTranspose
 

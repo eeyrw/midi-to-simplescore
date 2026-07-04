@@ -178,7 +178,7 @@ def calcEncodingTranspose(centroidNote, lowestNote, highestNote):
 
     afterLowest = lowestNote + encodingTranspose
     if afterLowest < 0:
-        encodingTranspose += -afterLowest
+        encodingTranspose = -lowestNote
 
     return encodingTranspose
 
