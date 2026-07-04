@@ -131,20 +131,29 @@ def getNoteNameValueMap():
 def calcTranspose(centroidNote, lowestNote, highestNote,
                   voiceCenterNote, lowerBoundNote, upperBoundNote):
     """Stage 1 — clamp to [lowerBound, upperBound] while centering on voiceCenterNote.
-    High-note priority when span exceeds bounds."""
+    When both bounds are violated (span > allowed range), picks the smaller shift."""
 
-    voiceTranspose = voiceCenterNote - centroidNote
+    suggestTranspose = voiceCenterNote - centroidNote
 
-    # Clamp to [lowerBound, upperBound], high notes first
-    afterHighest = highestNote + voiceTranspose
-    afterLowest = lowestNote + voiceTranspose
+    afterTransposeHighest = highestNote + suggestTranspose
+    afterTransposeLowest = lowestNote + suggestTranspose
 
-    if afterHighest > upperBoundNote:
-        voiceTranspose += upperBoundNote - afterHighest
-    elif afterLowest < lowerBoundNote:
-        voiceTranspose += lowerBoundNote - afterLowest
+    offsetToValidHighest = upperBoundNote - afterTransposeHighest
+    offsetToValidLowest = lowerBoundNote - afterTransposeLowest
 
-    return voiceTranspose
+    if offsetToValidHighest >= 0 and offsetToValidLowest <= 0:
+        pass
+    elif offsetToValidHighest < 0 and offsetToValidLowest > 0:
+        if abs(offsetToValidHighest) <= abs(offsetToValidLowest):
+            suggestTranspose += offsetToValidHighest
+        else:
+            suggestTranspose += offsetToValidLowest
+    elif offsetToValidHighest < 0:
+        suggestTranspose += offsetToValidHighest
+    elif offsetToValidLowest > 0:
+        suggestTranspose += offsetToValidLowest
+
+    return suggestTranspose
 
 
 def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
