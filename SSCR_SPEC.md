@@ -147,11 +147,9 @@ Stage 2: encT   = 30 - 48 = -18 → after: centroid=30, range=[14,46]   (全部�
 
 `voiceCenterNote` 不同但编码结果相同——因为 Stage 2 始终拉向 30，抵消了 Stage 1 的 centering 差异。
 
-#### 2.6.5 手动移调
+#### 2.6.5 完整示例
 
-当 `--useExtraTranspose` 启用时，跳过两级自动计算，`TotalTranspose` 直接取用户指定的 `--transpose` 值。
-
-**完整示例**（欢乐颂，voiceCenterNote=60，bounds=[0,127]）：
+欢乐颂（centroid=63, range=47~79, voiceCenterNote=60, bounds=[0,127]）：
 
 ```
 Original:  centroid=63  range=[47, 79]
@@ -164,9 +162,15 @@ Total T:   -33  → centroid=30  range=[14, 46]   (全部直连 0~61)
 
 播放器还原：`encodedNote - (-33) = encodedNote + 33` → 回调收到原始音高 47~79。
 
-#### 2.6.5 手动移调
+#### 2.6.6 手动移调
 
-当 `--useExtraTranspose` 启用时，跳过上述两级自动计算，`TotalTranspose` 直接取用户指定的 `--transpose` 值。此时两种修剪均不生效，用户需自行确保音符在 0~127 范围内。
+当 `--useExtraTranspose` 启用时，Stage 1 使用用户指定的 `--transpose` 替代自动计算，Stage 2 仍在用户基础上执行 centering：
+
+```
+voiceT = args.transpose          (用户指定，跳过自动 centering + 边界修剪)
+encT   = calcEncodingTranspose(centroid + voiceT, low + voiceT, high + voiceT)
+totalT = voiceT + encT
+```
 
 ---
 
