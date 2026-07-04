@@ -312,7 +312,7 @@ def generateDeltaBinV3(eventSetList, tickPerSecond, transpose=0,
                 continue
 
             mem.extend(encodeEventV3(
-                eventType, (note + transpose) & 0x7F, velocity,
+                eventType, note + transpose, velocity,
                 includeNoteOnVelocity, includeNoteOffVelocity))
 
     # Append EndOfScore: delta=0 + EOS
