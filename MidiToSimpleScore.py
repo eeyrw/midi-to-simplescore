@@ -141,11 +141,6 @@ def calcTranspose(centroidNote, lowestNote, highestNote,
 
     if offsetToValidHighest >= 0 and offsetToValidLowest <= 0:
         pass
-    elif offsetToValidHighest < 0 and offsetToValidLowest > 0:
-        if abs(offsetToValidHighest) <= abs(offsetToValidLowest):
-            voiceTranspose += offsetToValidHighest
-        else:
-            voiceTranspose += offsetToValidLowest
     elif offsetToValidHighest < 0:
         voiceTranspose += offsetToValidHighest
     elif offsetToValidLowest > 0:
@@ -157,8 +152,7 @@ def calcTranspose(centroidNote, lowestNote, highestNote,
 def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
                           lowerBoundNote, upperBoundNote):
     """Compute encoding transpose to center notes for optimal SSCR compression.
-    This is purely for encoding efficiency — the player auto-restores via
-    totalTranspose, so it has NO effect on final pitch.
+    Prefers downward shift to preserve high notes when span exceeds bounds.
     Returns (encodingTranspose, totalTranspose).
     """
 
@@ -173,10 +167,11 @@ def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
     afterLowest = lowestAfterVoice + encodingTranspose
     afterHighest = highestAfterVoice + encodingTranspose
 
-    if afterLowest < lowerBoundNote:
-        encodingTranspose += lowerBoundNote - afterLowest
+    # Fix high notes first (shift down) to preserve melody
     if afterHighest > upperBoundNote:
         encodingTranspose += upperBoundNote - afterHighest
+    if afterLowest < lowerBoundNote:
+        encodingTranspose += lowerBoundNote - afterLowest
 
     totalTranspose = voiceTranspose + encodingTranspose
 
