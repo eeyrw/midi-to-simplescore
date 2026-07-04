@@ -54,21 +54,125 @@ Velocity 值域 0–127，即 MIDI velocity 原始值。
 
 `uint32` 小端序。Event Data 段的总字节数（不含 header）。
 
-### 2.6 TotalTranspose
+### 2.6 TotalTranspose — 两级移调算法
 
-`int8` 有符号值，范围 -128 ～ +127。表示**编码时对原始 MIDI 音符施加的总移调半音数**。
+`TotalTranspose` 是两级移调的叠加结果，存储在 header 第 12 字节（`int8`），播放器通过逆运算还原原始音高。
 
-编码流程：
-1. 用户可指定乐器移调（`--voiceCenterNote`），适配目标音域
-2. 生成器自动叠加编码移调，使音符中心逼近 30，最大化直连编码命中率
-3. `TotalTranspose = voiceTranspose + encodingTranspose`
+#### 2.6.1 两级移调概述
 
-播放端还原原始音高：
+```
+原始 MIDI 音符
+     │
+     ▼  voiceTranspose (乐器移调，适配目标音域)
+     │
+voice 移调后音符
+     │
+     ▼  encodingTranspose (编码移调，压缩优化)
+     │
+最终编码音符  ←── 存储在 Event Data 中
+```
+
+| 阶段 | 变量 | 职责 | 修剪行为 |
+|------|------|------|----------|
+| **Voice** | `voiceTranspose` | 将 centroid 对齐 `voiceCenterNote`，同时修剪越界音符 | **高音优先**：高音越界→整体下移（低音可被牺牲） |
+| **Encoding** | `encodingTranspose` | 将 centroid 移至 30，最大化直连编码命中率 | **不做修剪**：仅防低音跌入负值 |
+
+```
+TotalTranspose = voiceTranspose + encodingTranspose
+```
+
+#### 2.6.2 第一级：Voice Transpose（乐器移调）
+
+目的：使用户指定的中心音高 `voiceCenterNote`（默认 C4=60）成为新 centroid，同时确保所有音符在 `[lowerBoundNote, upperBoundNote]`（默认 0~127）内。
+
+**算法** (对应 `calcTranspose`)：
+
+```
+voiceTranspose = voiceCenterNote - centroidNote
+
+afterHighest = highestNote + voiceTranspose
+afterLowest  = lowestNote  + voiceTranspose
+
+# Case 1: 全部在界内 → 无需调整
+if afterHighest ≤ upperBound and afterLowest ≥ lowerBound:
+    pass
+
+# Case 2: 高音越界 → 整体下移（保高音）
+elif afterHighest > upperBound:
+    voiceTranspose += upperBound - afterHighest
+
+# Case 3: 低音越界 → 整体上移
+elif afterLowest < lowerBound:
+    voiceTranspose += lowerBound - afterLowest
+```
+
+**关键决策：Case 2 优先于 Case 3。** 当曲目跨度超过允许范围时，`elif` 链确保高音分支优先执行——整体下移，高音保留在界内，低音可能被切至 `lowerBound`。
+
+**示例** (voiceCenterNote=60, bounds=[0,127])：
+
+| 原始音域 | centroid | voiceT 初始 | 越界情况 | 调整后 voiceT | 最终音域 |
+|----------|----------|------------|----------|-------------|----------|
+| 47–79 | 63 | -3 | 全部入界 | -3 | 44–76 |
+| 34–103 | 68 | -8 | 高音 95<127 OK | -8 | 26–95 |
+| 10–95 | 52 | +8 | 低音 18>0 OK | +8 | 18–103 |
+| 5–130 | 67 | -7 | 高音 123<127, 低音 -2<0 | -7+2=-5 | **冲突：取高音优先，→ voiceT=-7** |
+
+#### 2.6.3 第二级：Encoding Transpose（编码移调）
+
+目的：将 voice 移调后的 centroid 移动到 **30**（直连范围 0~61 的中点），最大化单字节事件命中率。**不做任何修剪**——因为：
+- 高音在 voice 阶段已保在界内，encoding 只下移 centroid 60→30，高音不可能再越界
+- 低音可能因下移跌至负值，此时仅做最小上推修正
+
+**算法** (对应 `calcEncodingTranspose`)：
+
+```
+DIRECT_CENTER = 30
+centroidAfterVoice = centroidNote + voiceTranspose
+
+encodingTranspose = DIRECT_CENTER - centroidAfterVoice
+
+lowestAfterEncoding = (lowestNote + voiceTranspose) + encodingTranspose
+
+# 仅防低音跌入负值（高音无需处理）
+if lowestAfterEncoding < lowerBound:
+    encodingTranspose += lowerBound - lowestAfterEncoding
+```
+
+**为什么不需要修高音：**
+
+voice 阶段后 centroid ≈ 60，encoding 将 centroid 从 60 移至 30，移动量为 **-30**（下移）。voice 阶段已确保高音 ≤ 127，下移 30 后高音 ≤ 97，永不超过 127。
+
+若 voice 阶段 centroid 异常低（< 30），encoding 会上移，但此时 voice 阶段已确保低音 ≥ lowerBound，上移不会导致高音越界。
+
+#### 2.6.4 最终效果
+
+```
+encodedNote = originalNote + TotalTranspose
+                   = originalNote + voiceTranspose + encodingTranspose
+```
+
+播放器还原：
+
 ```
 originalNote = encodedNote - TotalTranspose
 ```
 
-若值为 0，表示编码前后音符一致（或移调恰好抵消）。
+**完整示例**（欢乐颂，voiceCenterNote=60，bounds=[0,127]）：
+
+```
+Original:  centroid=63  range=[47, 79]
+
+Voice T:   -3  → centroid=60  range=[44, 76]   (对齐 C4)
+Encoding T: -30 → centroid=30  range=[14, 46]   (进入直连范围)
+────────────────────────────────────────────────
+Total T:   -33  → centroid=30  range=[14, 46]   (全部直连 0~61)
+```
+
+播放器还原：`encodedNote - (-33) = encodedNote + 33` → 回调收到原始音高 47~79。
+
+#### 2.6.5 手动移调
+
+当 `--useExtraTranspose` 启用时，跳过上述两级自动计算，`TotalTranspose` 直接取用户指定的 `--transpose` 值。此时两种修剪均不生效，用户需自行确保音符在 0~127 范围内。
 
 ---
 
@@ -291,21 +395,21 @@ BE                                                   EOS
 
 | 曲目 | 时长 | NoteOn 数 | SSCR 大小 |
 |------|------|-----------|-----------|
-| Jolly Old Saint Nicholas | 19s | 95 | 271 B |
-| 欢乐颂 | 34s | 213 | 926 B |
-| We Three Kings | 33s | 135 | 477 B |
-| 卡农 (George Winston) | 5m23s | 3924 | 13383 B |
-| 1812 Overture | 60s | 5504 | 18618 B |
+| Jolly Old Saint Nicholas | 19s | 70 | 212 B |
+| We Three Kings | 33s | 128 | 374 B |
+| 欢乐颂 | 34s | 213 | 745 B |
+| 卡农 (George Winston) | 5m23s | 2408 | 8208 B |
+| 1812 Overture | 60s | 6160 | 12703 B |
 
 ---
 
 ## 7. 实现注意事项
 
-1. **全音域 0–127**: 直连 0–61（1 字节），扩展 62–127（2 字节）。生成器自动叠加编码移调使音符中心逼近 30，最大化直连命中率。
+1. **全音域 0–127**: 直连 0–61（1 字节），扩展 62–127（2 字节）。详见 §2.6 两级移调算法——生成器自动将 centroid 移至 30 以最大化直连命中率。
 2. **EndOfScore 无 payload**: `0xBE` 后不再读字节。
 3. **RESERVED (0xFE)**: 解析器应终止播放以保证向前兼容。
 4. **delta 上限 4 字节**: 覆盖 37 小时时长，实际足够。超过截断。
 5. **同一 tick 和弦**: 共享 delta，其中 delta=0 用 `0x00` 单字节编码。
 6. **NoteOff velocity**: 若 flags bit1=1，解析器必须跳过该字节，即使不使用其值。这确保流同步。
 7. **默认 velocity**: 未启用 velocity 时 NoteOn 力度默认为 127。
-8. **TotalTranspose**: 播放端用 `originalNote = encodedNote - TotalTranspose` 还原原始音高。也可叠加用户键移：`playNote = encodedNote - TotalTranspose + keyShift`。
+8. **高音优先**: Voice 移调阶段高音越界整体下移（低音可被牺牲），Encoding 移调阶段不做修剪（见 §2.6.2 和 §2.6.3）。
