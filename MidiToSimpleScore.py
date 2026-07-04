@@ -481,9 +481,19 @@ def main():
             centroidNote, lowestNote, highestNote, voiceTranspose,
             args.lowerBoundNote, args.upperBoundNote)
 
-        transposeMetaInfo = 'Voice transpose: %d\n' % voiceTranspose
-        transposeMetaInfo += 'Encoding transpose: %d\n' % encodingTranspose
-        transposeMetaInfo += 'Total transpose: %d' % totalTranspose
+        afterVoiceCentroid = centroidNote + voiceTranspose
+        afterEncCentroid  = centroidNote + totalTranspose
+
+        transposeMetaInfo = 'Original range: %d - %d (centroid=%d)\n' % (
+            lowestNote, highestNote, centroidNote)
+        transposeMetaInfo += 'Voice center target: %d\n' % args.voiceCenterNote
+        transposeMetaInfo += 'Voice transpose: %+d  -> centroid at %d\n' % (
+            voiceTranspose, afterVoiceCentroid)
+        transposeMetaInfo += 'Encoding transpose: %+d  -> centroid at %d\n' % (
+            encodingTranspose, afterEncCentroid)
+        transposeMetaInfo += 'Total transpose (in header): %+d\n' % totalTranspose
+        transposeMetaInfo += 'Encoded note range: %d - %d\n' % (
+            lowestNote + totalTranspose, highestNote + totalTranspose)
     else:
         totalTranspose = args.transpose
         transposeMetaInfo = 'Manual transpose: %d' % totalTranspose
