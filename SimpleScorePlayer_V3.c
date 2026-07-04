@@ -2,7 +2,7 @@
  * SimpleScorePlayer_V3.c — SSCR 乐谱播放器
  *
  * 解析 SSCR 二进制格式（见 SSCR_SPEC.md），以 tick 驱动方式触发
- * NoteOn / NoteOff 回调。设计目标为嵌入式平台：无堆分配、无递归、
+ * NoteOn / NoteOff 回调。自动还原编码移调至原始音高。
  * 所有边界检查内联。
  *
  * 格式要点:
@@ -188,6 +188,7 @@ static bool handle_event(ScorePlayerV3* p, uint8_t byte)
                 return false;
         }
 
+        note = (uint8_t)((int)note - p->totalTranspose);
         Synth_NoteOff(note);
     }
     else
@@ -220,6 +221,7 @@ static bool handle_event(ScorePlayerV3* p, uint8_t byte)
                 return false;
         }
 
+        note = (uint8_t)((int)note - p->totalTranspose);
         Synth_NoteOn(note, vel);
     }
 

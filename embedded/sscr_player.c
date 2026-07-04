@@ -2,6 +2,7 @@
  * sscr_player.c — SSCR 单乐谱播放器
  *
  * 解析 SSCR 二进制格式，以 tick 驱动方式触发回调。
+ * 自动还原编码移调——回调收到的 note 已是原始 MIDI 音高。
  * 设计为单文件库：直接 #include 到项目中即可使用。
  *
  * 依赖: <stdint.h>, <stdbool.h>
@@ -116,6 +117,7 @@ static bool sscr_handle_event(SSCR_Player* p, uint8_t byte)
             if (!sscr_read_byte(p, &dummy)) return false;
         }
 
+        note = (uint8_t)((int)note - p->totalTranspose);
         SSCR_SynthNoteOff(note);
     }
     else
@@ -138,6 +140,7 @@ static bool sscr_handle_event(SSCR_Player* p, uint8_t byte)
             if (!sscr_read_byte(p, &vel)) return false;
         }
 
+        note = (uint8_t)((int)note - p->totalTranspose);
         SSCR_SynthNoteOn(note, vel);
     }
 
