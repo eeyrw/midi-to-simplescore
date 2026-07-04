@@ -142,39 +142,45 @@ def calcTranspose(centroidNote, lowestNote, highestNote,
     offsetToValidLowest = lowerBoundNote - afterTransposeLowest
 
     if offsetToValidHighest >= 0 and offsetToValidLowest <= 0:
-        pass
+        pass  # all notes already within bounds
     elif offsetToValidHighest < 0 and offsetToValidLowest > 0:
+        # span wider than allowed range — pick smaller adjustment
         if abs(offsetToValidHighest) <= abs(offsetToValidLowest):
-            suggestTranspose += offsetToValidHighest
+            suggestTranspose += offsetToValidHighest  # shift down
         else:
-            suggestTranspose += offsetToValidLowest
+            suggestTranspose += offsetToValidLowest   # shift up
     elif offsetToValidHighest < 0:
-        suggestTranspose += offsetToValidHighest
+        suggestTranspose += offsetToValidHighest      # high exceeds, shift down
     elif offsetToValidLowest > 0:
-        suggestTranspose += offsetToValidLowest
+        suggestTranspose += offsetToValidLowest       # low exceeds, shift up
 
     return suggestTranspose
 
 
-def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
-                          lowerBoundNote, upperBoundNote):
+def calcEncodingTranspose(centroidNote, lowestNote, highestNote):
     """Stage 2 — aggressive centering to 30 for max direct-range compression.
-    Only guarantees low ≥ 0; high notes may exceed 61 (extended encoding).
-    Stage 1 already ensures all notes in [0, 127], and encoding shifts DOWN
-    (centroid ~60→30), so high end never needs checking.
-    Returns (encodingTranspose, totalTranspose)."""
+
+    Parameters are the voice-transposed values:
+      centroidNote = original centroid + voiceTranspose
+      lowestNote   = original lowest   + voiceTranspose
+      highestNote  = original highest  + voiceTranspose
+
+    Encoding shifts centroid to DIRECT_CENTER=30. If this pushes the
+    lowest note below 0, the shift is reduced just enough to keep it at 0.
+    High notes that exceed 61 after shifting are NOT trimmed — they simply
+    use extended (2-byte) encoding.
+
+    Returns encodingTranspose (the caller adds voiceTranspose to get totalT)."""
 
     DIRECT_CENTER = 30
-    centroidAfterVoice = centroidNote + voiceTranspose
 
-    encodingTranspose = DIRECT_CENTER - centroidAfterVoice
+    encodingTranspose = DIRECT_CENTER - centroidNote
 
-    afterLowest = lowestNote + voiceTranspose + encodingTranspose
+    afterLowest = lowestNote + encodingTranspose
     if afterLowest < 0:
         encodingTranspose += -afterLowest
 
-    totalTranspose = voiceTranspose + encodingTranspose
-    return encodingTranspose, totalTranspose
+    return encodingTranspose
 
 
 # ============================================================
@@ -464,12 +470,13 @@ def main():
             args.lowerBoundNote,
             args.upperBoundNote)
 
-        encodingTranspose, totalTranspose = calcEncodingTranspose(
-            centroidNote, lowestNote, highestNote, voiceTranspose,
-            args.lowerBoundNote, args.upperBoundNote)
-
         afterVoiceCentroid = centroidNote + voiceTranspose
-        afterEncCentroid  = centroidNote + totalTranspose
+
+        encodingTranspose = calcEncodingTranspose(
+            afterVoiceCentroid,lowestNote + voiceTranspose, highestNote + voiceTranspose)
+
+        totalTranspose = voiceTranspose + encodingTranspose
+        afterEncCentroid = afterVoiceCentroid + encodingTranspose
 
         transposeMetaInfo = 'Original range: %d - %d (centroid=%d)\n' % (
             lowestNote, highestNote, centroidNote)

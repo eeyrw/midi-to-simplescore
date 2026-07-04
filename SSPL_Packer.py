@@ -42,8 +42,12 @@ def build_sspl(midi_files, voiceCenterNote=60, lowerBoundNote=0,
 
         voiceTranspose = calcTranspose(centroid, lowest, highest,
                                        voiceCenterNote, lowerBoundNote, upperBoundNote)
-        encodingTranspose, totalTranspose = calcEncodingTranspose(
-            centroid, lowest, highest, voiceTranspose, lowerBoundNote, upperBoundNote)
+
+        afterVoiceCentroid = centroid + voiceTranspose
+        encodingTranspose = calcEncodingTranspose(
+            afterVoiceCentroid, 0, 61)
+
+        totalTranspose = voiceTranspose + encodingTranspose
 
         eventList = readMidiFileFull(path)
         eventSetList = generateEventSetList(eventList)
