@@ -469,28 +469,33 @@ def main():
             args.voiceCenterNote,
             args.lowerBoundNote,
             args.upperBoundNote)
+    else:
+        voiceTranspose = args.transpose
 
-        afterVoiceCentroid = centroidNote + voiceTranspose
+    afterVoiceCentroid = centroidNote + voiceTranspose
+    encodingTranspose = calcEncodingTranspose(
+        afterVoiceCentroid,
+        lowestNote + voiceTranspose,
+        highestNote + voiceTranspose)
 
-        encodingTranspose = calcEncodingTranspose(
-            afterVoiceCentroid,lowestNote + voiceTranspose, highestNote + voiceTranspose)
+    totalTranspose = voiceTranspose + encodingTranspose
+    afterEncCentroid = afterVoiceCentroid + encodingTranspose
 
-        totalTranspose = voiceTranspose + encodingTranspose
-        afterEncCentroid = afterVoiceCentroid + encodingTranspose
-
+    if not args.useExtraTranspose:
         transposeMetaInfo = 'Original range: %d - %d (centroid=%d)\n' % (
             lowestNote, highestNote, centroidNote)
         transposeMetaInfo += 'Voice center target: %d\n' % args.voiceCenterNote
         transposeMetaInfo += 'Voice transpose: %+d  -> centroid at %d\n' % (
             voiceTranspose, afterVoiceCentroid)
-        transposeMetaInfo += 'Encoding transpose: %+d  -> centroid at %d\n' % (
-            encodingTranspose, afterEncCentroid)
-        transposeMetaInfo += 'Total transpose (in header): %+d\n' % totalTranspose
-        transposeMetaInfo += 'Encoded note range: %d - %d\n' % (
-            lowestNote + totalTranspose, highestNote + totalTranspose)
     else:
-        totalTranspose = args.transpose
-        transposeMetaInfo = 'Manual transpose: %d' % totalTranspose
+        transposeMetaInfo = 'Manual voice transpose: %+d  -> centroid at %d\n' % (
+            voiceTranspose, afterVoiceCentroid)
+
+    transposeMetaInfo += 'Encoding transpose: %+d  -> centroid at %d\n' % (
+        encodingTranspose, afterEncCentroid)
+    transposeMetaInfo += 'Total transpose (in header): %+d\n' % totalTranspose
+    transposeMetaInfo += 'Encoded note range: %d - %d\n' % (
+        lowestNote + totalTranspose, highestNote + totalTranspose)
 
     # Generate score
     if args.scoreFormat == 'old':
