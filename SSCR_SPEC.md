@@ -5,7 +5,7 @@
 | 目标 | 实现 |
 |------|------|
 | 字节值直接区分 delta / event | MSB 判别：`bit7=0` → delta，`bit7=1` → event |
-| 多数事件单字节编码 | Note 0~61 直连 1 字节，62~127 扩展 2 字节；覆盖全音域 |
+| 多数事件单字节编码 | Note 0–61 直连 1 字节，62–127 扩展 2 字节；覆盖全音域 |
 | 解析器极简 | 一次 `byte & 0x80` 完成分支，`byte >> 6` 二级分派 |
 | 和弦紧凑 | 同一 tick 的多事件共享一个 delta |
 | 安全 | 变长字段有上限，溢出即终止 |
@@ -41,9 +41,9 @@ ASCII 字符串 `SSCR`。用于快速识别文件格式。
 |-----|------|------|
 | 0   | VEL_NOTEON  | NoteOn 事件包含 1 字节 velocity |
 | 1   | VEL_NOTEOFF | NoteOff 事件包含 1 字节 velocity |
-| 2~7 | Reserved    | 必须为 0，解析器忽略 |
+| 2–7 | Reserved    | 必须为 0，解析器忽略 |
 
-Velocity 值域 0~127，即 MIDI velocity 原始值。
+Velocity 值域 0–127，即 MIDI velocity 原始值。
 
 ### 2.4 TickPerSecond
 
@@ -72,13 +72,13 @@ Velocity 值域 0~127，即 MIDI velocity 原始值。
 字节按 bit7 分为两个互斥域：
 
 ```
-0x00 ~ 0x7F  (bit7=0)   Delta 字节
-0x80 ~ 0xFF  (bit7=1)   Event 字节
+0x00–0x7F  (bit7=0)   Delta 字节
+0x80–0xFF  (bit7=1)   Event 字节
 ```
 
 ### 3.2 Delta
 
-每个 delta 由 1~4 个 delta 字节组成，**小端序** 6-bit chunk 编码。
+每个 delta 由 1–4 个 delta 字节组成，**小端序** 6-bit chunk 编码。
 
 ```
 Delta byte:
@@ -94,10 +94,10 @@ delta 值 = `d0 | (d1 << 6) | (d2 << 12) | (d3 << 18)`
 
 | 值范围 | 字节数 | TickPerSecond=125 对应时长 |
 |--------|--------|---------------------------|
-| 0 ~ 63      | 1 | 0 ~ 0.5 秒   |
-| 64 ~ 4095   | 2 | ~32 秒       |
-| 4096 ~ 262K | 3 | ~35 分钟     |
-| 262K ~ 16M  | 4 | ~37 小时     |
+| 0–63      | 1 | 0–0.5 秒   |
+| 64–4095   | 2 | ≈32 秒       |
+| 4096–262K | 3 | ≈35 分钟     |
+| 262K–16M  | 4 | ≈37 小时     |
 
 编码示例：
 
@@ -120,23 +120,23 @@ Event byte:
 
   t = 0: NoteOff 组
   t = 1: NoteOn 组
-  ssssss: note 值 (0~61) 或控制码 (62~63)
+  ssssss: note 值 (0–61) 或控制码 (62–63)
 ```
 
 #### 3.3.2 码表
 
 | 字节值 | 名称 | 含义 |
 |--------|------|------|
-| `0x80 ~ 0xBD` | NOFF_DIRECT | NoteOff, note = byte & 0x3F (0~61) |
+| `0x80–0xBD` | NOFF_DIRECT | NoteOff, note = byte & 0x3F (0–61) |
 | `0xBE` | EOS | EndOfScore，无后续字节，立即停止 |
-| `0xBF` | NOFF_EXT | NoteOff 扩展，下一字节 = note (0~127) |
-| `0xC0 ~ 0xFD` | NON_DIRECT | NoteOn, note = byte & 0x3F (0~61) |
+| `0xBF` | NOFF_EXT | NoteOff 扩展，下一字节 = note (0–127) |
+| `0xC0–0xFD` | NON_DIRECT | NoteOn, note = byte & 0x3F (0–61) |
 | `0xFE` | RESERVED | 保留，解析器应停止 |
-| `0xFF` | NON_EXT | NoteOn 扩展，下一字节 = note (0~127) |
+| `0xFF` | NON_EXT | NoteOn 扩展，下一字节 = note (0–127) |
 
 #### 3.3.3 直连与扩展
 
-note 范围 0~61 使用直连编码（1 字节），62~127 使用扩展编码（escape + note，2 字节）。**全音域 0~127 均可表示。**
+note 范围 0–61 使用直连编码（1 字节），62–127 使用扩展编码（escape + note，2 字节）。**全音域 0–127 均可表示。**
 
 直连范围覆盖 5 个八度。移调系统将曲目中心拉到 note 31 附近，可保证绝大多数音符落在直连范围内，最大化压缩效果。编码选择由生成器在转换时决定，解析器按统一规则分派。
 
@@ -287,7 +287,7 @@ BE                                           EOS
 
 ## 7. 实现注意事项
 
-1. **全音域 0~127**: 直连 0~61（1 字节），扩展 62~127（2 字节）。生成器应利用移调将曲目中心拉到 note 31 附近，最大化直连命中率。
+1. **全音域 0–127**: 直连 0–61（1 字节），扩展 62–127（2 字节）。生成器应利用移调将曲目中心拉到 note 31 附近，最大化直连命中率。
 2. **EndOfScore 无 payload**: `0xBE` 后不再读字节。
 3. **RESERVED (0xFE)**: 解析器应终止播放以保证向前兼容。
 4. **delta 上限 4 字节**: 覆盖 37 小时时长，实际足够。超过截断。
