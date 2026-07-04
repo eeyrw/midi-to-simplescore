@@ -152,24 +152,23 @@ def calcTranspose(centroidNote, lowestNote, highestNote,
 def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
                           lowerBoundNote, upperBoundNote):
     """Compute encoding transpose to center notes for optimal SSCR compression.
-    Prefers downward shift to preserve high notes when span exceeds bounds.
+    This is purely for compression — NO trimming. All boundary enforcement
+    is handled by calcTranspose (voice stage) before this.
+
     Returns (encodingTranspose, totalTranspose).
     """
 
     centroidAfterVoice = centroidNote + voiceTranspose
     lowestAfterVoice = lowestNote + voiceTranspose
-    highestAfterVoice = highestNote + voiceTranspose
 
     DIRECT_CENTER = 30
 
     encodingTranspose = DIRECT_CENTER - centroidAfterVoice
 
+    # Only catch notes that would go below 0 after encoding shift.
+    # High-end violations can't happen: voice stage ensures high ≤ upperBound
+    # and encoding shifts DOWN (centroid ~60 → 30).
     afterLowest = lowestAfterVoice + encodingTranspose
-    afterHighest = highestAfterVoice + encodingTranspose
-
-    # Fix high notes first (shift down) to preserve melody
-    if afterHighest > upperBoundNote:
-        encodingTranspose += upperBoundNote - afterHighest
     if afterLowest < lowerBoundNote:
         encodingTranspose += lowerBoundNote - afterLowest
 
