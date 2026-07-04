@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "midi-to-simplescore"
+version = "1.0.0"
+description = "将 MIDI 文件转换为嵌入式设备可播放的紧凑乐谱数据"
+license = {text = "GPL-3.0-only"}
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    {name = "eeyrw"}
+]
+keywords = ["midi", "embedded", "music", "microcontroller"]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
+    "Topic :: Software Development :: Embedded Systems",
+]
+
+dependencies = [
+    "mido>=1.3",
+    "terminaltables>=3.1",
+]
+
+[project.scripts]
+midi-to-simplescore = "MidiToSimpleScore:main"
+midi-to-simplescore-legacy = "MidiToSimpleScore_Legacy:main"
+
+[project.urls]
+Repository = "https://github.com/eeyrw/midi-to-simplescore"
+
+[tool.setuptools]
+py-modules = ["MidiToSimpleScore", "MidiToSimpleScore_Legacy"]
