@@ -7,6 +7,7 @@
 | 格式 | 规范 | 说明 |
 |------|------|------|
 | **SSCR** | [SSCR_SPEC.md](SSCR_SPEC.md) | 单字节事件 + 6-bit delta，完整 NoteOn/Off + 力度 |
+| **SSPL** | [SSPL_SPEC.md](SSPL_SPEC.md) | 多乐谱容器，固定目录表，极简解析 |
 | SSCR Legacy | [SSCR_LEGACY_SPEC.md](SSCR_LEGACY_SPEC.md) | 仅 NoteOn，极简。新项目不推荐 |
 
 ## 安装
@@ -72,6 +73,31 @@ midi-to-simplescore --midi song.mid --scoreFormat old
 
 # 手动移调
 midi-to-simplescore --midi song.mid --useExtraTranspose --transpose -3
+```
+
+## SSPL 多乐谱打包
+
+将多条 MIDI 打包为一个 SSPL 容器文件：
+
+```bash
+python SSPL_Packer.py song1.mid song2.mid song3.mid -o playlist.sspl
+```
+
+嵌入式播放：
+
+```c
+#include "SSPL_Player.h"
+#include "SimpleScorePlayer_V3.c"
+
+SSPL_Player sspl;
+SSPL_Init(&sspl, ssplData, ssplSize);
+
+for (uint16_t i = 0; i < SSPL_GetCount(&sspl); i++) {
+    const uint8_t *data; uint32_t size;
+    SSPL_GetEntry(&sspl, i, &data, &size);
+    ScorePlayerV3_Init(&player, data, size);
+    // play until finished, then next...
+}
 ```
 
 ## 模板
