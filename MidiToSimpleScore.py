@@ -156,9 +156,10 @@ def calcTranspose(centroidNote, lowestNote, highestNote,
 
 def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
                           lowerBoundNote, upperBoundNote):
-    """Compute additional transpose to center notes for optimal SSCR encoding.
+    """Compute encoding transpose to center notes for optimal SSCR compression.
+    This is purely for encoding efficiency — the player auto-restores via
+    totalTranspose, so it has NO effect on final pitch.
     Returns (encodingTranspose, totalTranspose).
-    totalTranspose = voiceTranspose + encodingTranspose.
     """
 
     centroidAfterVoice = centroidNote + voiceTranspose
