@@ -6,8 +6,8 @@
  * 所有边界检查内联。
  *
  * 格式要点:
- *   - 文件头 12 字节: Magic "SSCR" + Version(1) + Flags(1) +
- *                    TickPerSecond(2 LE) + DataLength(4 LE)
+ *   - 文件头 13 字节: Magic "SSCR" + Version(1) + Flags(1) +
+ *     TickPerSecond(2 LE) + DataLength(4 LE) + TotalTranspose(1 int8)
  *   - 字节按 MSB 分区: [0x00..0x7F] = delta, [0x80..0xFF] = event
  *   - Delta: 6-bit chunk，小端序，bit6=1 表示还有后续字节
  *   - Event: bit7=1, bit6=类型 (0=off,1=on), bit5-0=note(0~61) 或控制码
@@ -22,7 +22,7 @@
  * 常量
  * ------------------------------------------------------------------ */
 
-#define SSCR_HEADER_SIZE  12
+#define SSCR_HEADER_SIZE  13
 
 /* ------------------------------------------------------------------
  * 播放器状态
@@ -44,6 +44,7 @@ typedef struct {
 
     /* ---- Header 缓存 ---- */
     uint16_t        tickPerSecond;  // 用于换算的 tick 频率（记录用，解析器不直接使用）
+    int8_t          totalTranspose; // header 中的总移调值（见 §2.6）
     uint8_t         version;        // SSCR 版本号
     uint8_t         flags;          // 标志位: bit0=NoteOn有velocity, bit1=NoteOff有velocity
 
@@ -265,6 +266,9 @@ bool ScorePlayerV3_Init(ScorePlayerV3* p, const uint8_t* score, uint32_t totalSi
     if (dataLength > totalSize - SSCR_HEADER_SIZE)
         return false;
 
+    // 总移调值 (int8)
+    p->totalTranspose = (int8_t)score[12];
+
     // ---- 初始化数据流 ----
     p->data     = &score[SSCR_HEADER_SIZE];  // 跳过 header
     p->length   = dataLength;
@@ -358,6 +362,21 @@ uint32_t ScorePlayerV3_GetCurrentTick(ScorePlayerV3* p)
 bool ScorePlayerV3_IsFinished(ScorePlayerV3* p)
 {
     return p->finished;
+}
+
+/**
+ * 获取 header 中存储的总移调值。
+ *
+ * 编码时施加的总移调半音数（乐器移调 + 编码移调）。
+ * 还原原始音高: originalNote = encodedNote - totalTranspose。
+ * 叠加用户键移:   playNote = encodedNote - totalTranspose + keyShift。
+ *
+ * @param p 播放器实例指针
+ * @return 有符号移调值 (-128 ~ +127)
+ */
+int8_t ScorePlayerV3_GetTotalTranspose(ScorePlayerV3* p)
+{
+    return p->totalTranspose;
 }
 
 /* ==================================================================

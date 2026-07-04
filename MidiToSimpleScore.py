@@ -131,10 +131,10 @@ def getNoteNameValueMap():
 def calcTranspose(centroidNote, lowestNote, highestNote,
                   voiceCenterNote, lowerBoundNote, upperBoundNote):
 
-    suggestTranspose = voiceCenterNote - centroidNote
+    voiceTranspose = voiceCenterNote - centroidNote
 
-    afterTransposeHighest = highestNote + suggestTranspose
-    afterTransposeLowest = lowestNote + suggestTranspose
+    afterTransposeHighest = highestNote + voiceTranspose
+    afterTransposeLowest = lowestNote + voiceTranspose
 
     offsetToValidHighest = upperBoundNote - afterTransposeHighest
     offsetToValidLowest = lowerBoundNote - afterTransposeLowest
@@ -143,32 +143,43 @@ def calcTranspose(centroidNote, lowestNote, highestNote,
         pass
     elif offsetToValidHighest < 0 and offsetToValidLowest > 0:
         if abs(offsetToValidHighest) <= abs(offsetToValidLowest):
-            suggestTranspose += offsetToValidHighest
+            voiceTranspose += offsetToValidHighest
         else:
-            suggestTranspose += offsetToValidLowest
+            voiceTranspose += offsetToValidLowest
     elif offsetToValidHighest < 0:
-        suggestTranspose += offsetToValidHighest
+        voiceTranspose += offsetToValidHighest
     elif offsetToValidLowest > 0:
-        suggestTranspose += offsetToValidLowest
+        voiceTranspose += offsetToValidLowest
 
-    tableData = [('Item', 'Value'),
-                 ('lowestNote', str(lowestNote)),
-                 ('highestNote', str(highestNote)),
-                 ('centroidNote', str(centroidNote)),
-                 ('voiceCenterNote', str(voiceCenterNote)),
-                 ('suggestTranspose', str(suggestTranspose)),
-                 ]
+    return voiceTranspose
 
-    if AsciiTable is not None:
-        table = AsciiTable(tableData)
-        table.inner_row_border = True
-        table.title = 'Transpose'
-        tableText = table.table
-    else:
-        lines = ["{:<18} {}".format(*row) for row in tableData]
-        tableText = '\n'.join(lines)
 
-    return suggestTranspose, tableText
+def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
+                          lowerBoundNote, upperBoundNote):
+    """Compute additional transpose to center notes for optimal SSCR encoding.
+    Returns (encodingTranspose, totalTranspose).
+    totalTranspose = voiceTranspose + encodingTranspose.
+    """
+
+    centroidAfterVoice = centroidNote + voiceTranspose
+    lowestAfterVoice = lowestNote + voiceTranspose
+    highestAfterVoice = highestNote + voiceTranspose
+
+    DIRECT_CENTER = 30
+
+    encodingTranspose = DIRECT_CENTER - centroidAfterVoice
+
+    afterLowest = lowestAfterVoice + encodingTranspose
+    afterHighest = highestAfterVoice + encodingTranspose
+
+    if afterLowest < lowerBoundNote:
+        encodingTranspose += lowerBoundNote - afterLowest
+    elif afterHighest > upperBoundNote:
+        encodingTranspose += upperBoundNote - afterHighest
+
+    totalTranspose = voiceTranspose + encodingTranspose
+
+    return encodingTranspose, totalTranspose
 
 
 # ============================================================
@@ -309,10 +320,11 @@ def generateDeltaBinV3(eventSetList, tickPerSecond, transpose=0,
     print("Mem size (V3):", len(mem), " byte(s)")
     return mem
 
-def addHeader(scoreBytes, tickPerSecond, includeNoteOnVelocity=False, includeNoteOffVelocity=False):
+def addHeader(scoreBytes, tickPerSecond, totalTranspose=0,
+               includeNoteOnVelocity=False, includeNoteOffVelocity=False):
     header = bytearray()
     header.extend(b'SSCR')
-    header.append(0x02)  # Version 2 = V3 format
+    header.append(0x03)  # Version
 
     flags = 0
     if includeNoteOnVelocity:
@@ -329,6 +341,8 @@ def addHeader(scoreBytes, tickPerSecond, includeNoteOnVelocity=False, includeNot
     header.append((length >> 8) & 0xFF)
     header.append((length >> 16) & 0xFF)
     header.append((length >> 24) & 0xFF)
+
+    header.append(totalTranspose & 0xFF)
 
     print("Header added. Total size:", len(header) + len(scoreBytes))
     return header + scoreBytes
@@ -449,28 +463,36 @@ def main():
     centroidNote, lowestNote, highestNote = analyzeNoteList(noteOnList)
 
     if not args.useExtraTranspose:
-        t, transposeMetaInfo = calcTranspose(
+        voiceTranspose = calcTranspose(
             centroidNote, lowestNote, highestNote,
             args.voiceCenterNote,
             args.lowerBoundNote,
             args.upperBoundNote)
+
+        encodingTranspose, totalTranspose = calcEncodingTranspose(
+            centroidNote, lowestNote, highestNote, voiceTranspose,
+            args.lowerBoundNote, args.upperBoundNote)
+
+        transposeMetaInfo = 'Voice transpose: %d\n' % voiceTranspose
+        transposeMetaInfo += 'Encoding transpose: %d\n' % encodingTranspose
+        transposeMetaInfo += 'Total transpose: %d' % totalTranspose
     else:
-        t = args.transpose
-        transposeMetaInfo = 'Use Extern Transpose: %d' % t
+        totalTranspose = args.transpose
+        transposeMetaInfo = 'Manual transpose: %d' % totalTranspose
 
     # Generate score
     if args.scoreFormat == 'old':
         noteOnSetList = generateNoteOnSetList(noteOnList)
         binData = generateDeltaBin(noteOnSetList,
-                                   args.tickPerSecond, t)
+                                   args.tickPerSecond, totalTranspose)
     else:
         eventList = readMidiFileFull(filePath)
         eventSetList = generateEventSetList(eventList)
         raw = generateDeltaBinV3(eventSetList,
-                                 args.tickPerSecond, t,
+                                 args.tickPerSecond, totalTranspose,
                                  args.includeNoteOnVelocity,
                                  args.includeNoteOffVelocity)
-        binData = addHeader(raw, args.tickPerSecond,
+        binData = addHeader(raw, args.tickPerSecond, totalTranspose,
                             args.includeNoteOnVelocity,
                             args.includeNoteOffVelocity)
 

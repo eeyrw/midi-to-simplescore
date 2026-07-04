@@ -15,25 +15,22 @@
 ## 2. 文件结构
 
 ```
-Offset | Size | Field         | Type
--------|------|---------------|-----------
-0      | 4    | Magic         | "SSCR" (0x53 0x53 0x43 0x52)
-4      | 1    | Version       | uint8 = 0x02
-5      | 1    | Flags         | uint8
-6      | 2    | TickPerSecond | uint16 LE
-8      | 4    | DataLength    | uint32 LE
-12     | var  | Event Data    | 见 §3
+Offset | Size | Field           | Type
+-------|------|-----------------|-----------
+0      | 4    | Magic           | "SSCR" (0x53 0x53 0x43 0x52)
+4      | 1    | Version         | uint8 = 0x03
+5      | 1    | Flags           | uint8
+6      | 2    | TickPerSecond   | uint16 LE
+8      | 4    | DataLength      | uint32 LE
+12     | 1    | TotalTranspose  | int8 (signed)
+13     | var  | Event Data      | 见 §3
 ```
 
-Header 固定 12 字节。
-
-### 2.1 Magic
-
-ASCII 字符串 `SSCR`。用于快速识别文件格式。
+Header 固定 13 字节。
 
 ### 2.2 Version
 
-当前版本 `0x02`。解析器应检查此字段，拒绝不支持的版本。
+当前版本 `0x03`。解析器应检查此字段，拒绝不支持的版本。
 
 ### 2.3 Flags
 
@@ -56,6 +53,22 @@ Velocity 值域 0–127，即 MIDI velocity 原始值。
 ### 2.5 DataLength
 
 `uint32` 小端序。Event Data 段的总字节数（不含 header）。
+
+### 2.6 TotalTranspose
+
+`int8` 有符号值，范围 -128 ～ +127。表示**编码时对原始 MIDI 音符施加的总移调半音数**。
+
+编码流程：
+1. 用户可指定乐器移调（`--voiceCenterNote`），适配目标音域
+2. 生成器自动叠加编码移调，使音符中心逼近 30，最大化直连编码命中率
+3. `TotalTranspose = voiceTranspose + encodingTranspose`
+
+播放端还原原始音高：
+```
+originalNote = encodedNote - TotalTranspose
+```
+
+若值为 0，表示编码前后音符一致（或移调恰好抵消）。
 
 ---
 
@@ -172,10 +185,11 @@ EndOfScore 和 RESERVED 无 velocity。
 
 ```
 Init(score, size):
-  if size < 12 or magic != "SSCR": return false
-  if dataLength > size - 12: return false
+  if size < 13 or magic != "SSCR": return false
+  if dataLength > size - 13: return false
   flags = score[5]
-  position = 12, length = dataLength
+  totalTranspose = (int8_t)score[12]
+  position = 13, length = dataLength
   nextEventTick = read_delta()
   finished = false
 
@@ -259,14 +273,14 @@ NOFF 72     → 0xBF 0x48
 EOS         → 0xBE
 ```
 
-完整字节流（header 12 + data 28 = 40 字节）：
+完整字节流（header 13 + data 28 = 41 字节）：
 
 ```
-53 53 43 52  02 00  7D 00  1C 00 00 00    header
-00   FC FF 40 FF 43                         t=0.000
-3F   BC BF 40 BF 43 FF 48                   t=0.504
-3F   BF 48                                  t=1.008
-BE                                           EOS
+53 53 43 52  03 00  7D 00  1C 00 00 00  00   ← header (TotalTranspose=0)
+00   FC FF 40 FF 43                                 t=0.000
+3F   BC BF 40 BF 43 FF 48                           t=0.504
+3F   BF 48                                          t=1.008
+BE                                                   EOS
 ```
 
 ---
@@ -287,10 +301,11 @@ BE                                           EOS
 
 ## 7. 实现注意事项
 
-1. **全音域 0–127**: 直连 0–61（1 字节），扩展 62–127（2 字节）。生成器应利用移调将曲目中心拉到 note 31 附近，最大化直连命中率。
+1. **全音域 0–127**: 直连 0–61（1 字节），扩展 62–127（2 字节）。生成器自动叠加编码移调使音符中心逼近 30，最大化直连命中率。
 2. **EndOfScore 无 payload**: `0xBE` 后不再读字节。
 3. **RESERVED (0xFE)**: 解析器应终止播放以保证向前兼容。
 4. **delta 上限 4 字节**: 覆盖 37 小时时长，实际足够。超过截断。
 5. **同一 tick 和弦**: 共享 delta，其中 delta=0 用 `0x00` 单字节编码。
 6. **NoteOff velocity**: 若 flags bit1=1，解析器必须跳过该字节，即使不使用其值。这确保流同步。
 7. **默认 velocity**: 未启用 velocity 时 NoteOn 力度默认为 127。
+8. **TotalTranspose**: 播放端用 `originalNote = encodedNote - TotalTranspose` 还原原始音高。也可叠加用户键移：`playNote = encodedNote - TotalTranspose + keyShift`。
