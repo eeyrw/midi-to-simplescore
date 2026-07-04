@@ -63,99 +63,93 @@ Velocity 值域 0–127，即 MIDI velocity 原始值。
 ```
 原始 MIDI 音符
      │
-     ▼  voiceTranspose (乐器移调，适配目标音域)
+     ▼  Stage 1: calcTranspose       (乐器移调：对齐 voiceCenterNote + 边界修剪)
      │
 voice 移调后音符
      │
-     ▼  encodingTranspose (编码移调，压缩优化)
+     ▼  Stage 2: calcEncodingTranspose (编码移调：拉向 30 以最大化压缩)
      │
 最终编码音符  ←── 存储在 Event Data 中
 ```
 
-| 阶段 | 变量 | 职责 | 修剪行为 |
-|------|------|------|----------|
-| **Voice** | `voiceTranspose` | 将 centroid 对齐 `voiceCenterNote`，同时修剪越界音符 | **高音优先**：高音越界→整体下移（低音可被牺牲） |
-| **Encoding** | `encodingTranspose` | 将 centroid 移至 30，最大化直连编码命中率 | **不做修剪**：仅防低音跌入负值 |
+| 阶段 | 函数 | 输入 | 职责 |
+|------|------|------|------|
+| **Stage 1** | `calcTranspose` | 原始 centroid / low / high | 对齐 `voiceCenterNote`，修剪到 `[lowerBound, upperBound]` |
+| **Stage 2** | `calcEncodingTranspose` | voice 移调后的 centroid / low / high | 激进拉向 30；仅防低音 < 0，不修高音 |
 
 ```
 TotalTranspose = voiceTranspose + encodingTranspose
 ```
 
-#### 2.6.2 第一级：Voice Transpose（乐器移调）
+#### 2.6.2 Stage 1：Voice Transpose
 
-目的：使用户指定的中心音高 `voiceCenterNote`（默认 C4=60）成为新 centroid，同时确保所有音符在 `[lowerBoundNote, upperBoundNote]`（默认 0~127）内。
-
-**算法** (对应 `calcTranspose`)：
+**算法**（对应 `calcTranspose`）：
 
 ```
-voiceTranspose = voiceCenterNote - centroidNote
+voiceT = voiceCenterNote - centroid
 
-afterHighest = highestNote + voiceTranspose
-afterLowest  = lowestNote  + voiceTranspose
+afterHigh = highest + voiceT
+afterLow  = lowest  + voiceT
 
-# Case 1: 全部在界内 → 无需调整
-if afterHighest ≤ upperBound and afterLowest ≥ lowerBound:
-    pass
+offHigh = upperBound - afterHigh
+offLow  = lowerBound - afterLow
 
-# Case 2: 高音越界 → 整体下移（保高音）
-elif afterHighest > upperBound:
-    voiceTranspose += upperBound - afterHighest
-
-# Case 3: 低音越界 → 整体上移
-elif afterLowest < lowerBound:
-    voiceTranspose += lowerBound - afterLowest
+全部入界                 → pass
+仅高音越界 (offHigh < 0)  → voiceT += offHigh          (下移)
+仅低音越界 (offLow  > 0)  → voiceT += offLow           (上移)
+两边同时越界              → 选 |offHigh| 和 |offLow| 中较小的方向
 ```
 
-**关键决策：Case 2 优先于 Case 3。** 当曲目跨度超过允许范围时，`elif` 链确保高音分支优先执行——整体下移，高音保留在界内，低音可能被切至 `lowerBound`。
+输入参数 `lowerBoundNote` / `upperBoundNote` 默认 0 / 127。
 
-**示例** (voiceCenterNote=60, bounds=[0,127])：
+#### 2.6.3 Stage 2：Encoding Transpose
 
-| 原始音域 | centroid | voiceT 初始 | 越界情况 | 调整后 voiceT | 最终音域 |
-|----------|----------|------------|----------|-------------|----------|
-| 47–79 | 63 | -3 | 全部入界 | -3 | 44–76 |
-| 34–103 | 68 | -8 | 高音 95<127 OK | -8 | 26–95 |
-| 10–95 | 52 | +8 | 低音 18>0 OK | +8 | 18–103 |
-| 5–130 | 67 | -7 | 高音 123<127, 低音 -2<0 | -7+2=-5 | **冲突：取高音优先，→ voiceT=-7** |
+**输入：** voice 移调后的 centroid、lowest、highest 音符值。
 
-#### 2.6.3 第二级：Encoding Transpose（编码移调）
-
-目的：将 voice 移调后的 centroid 移动到 **30**（直连范围 0~61 的中点），最大化单字节事件命中率。**不做任何修剪**——因为：
-- 高音在 voice 阶段已保在界内，encoding 只下移 centroid 60→30，高音不可能再越界
-- 低音可能因下移跌至负值，此时仅做最小上推修正
-
-**算法** (对应 `calcEncodingTranspose`)：
+**算法**（对应 `calcEncodingTranspose`）：
 
 ```
-DIRECT_CENTER = 30
-centroidAfterVoice = centroidNote + voiceTranspose
+encT = 30 - centroidAfterVoice       // 激进拉向 30
 
-encodingTranspose = DIRECT_CENTER - centroidAfterVoice
+afterLowest = lowestAfterVoice + encT
+if afterLowest < 0:
+    encT += -afterLowest              // 仅防低音跌入负值
 
-lowestAfterEncoding = (lowestNote + voiceTranspose) + encodingTranspose
-
-# 仅防低音跌入负值（高音无需处理）
-if lowestAfterEncoding < lowerBound:
-    encodingTranspose += lowerBound - lowestAfterEncoding
+// 高音 > 61 不做处理 — 走扩展编码（2 字节）即可
 ```
 
-**为什么不需要修高音：**
+**关键点：**
 
-voice 阶段后 centroid ≈ 60，encoding 将 centroid 从 60 移至 30，移动量为 **-30**（下移）。voice 阶段已确保高音 ≤ 127，下移 30 后高音 ≤ 97，永不超过 127。
+- 输入基于 Stage 1 的结果，而非原始 MIDI 值
+- 激进 centering 到 30 以最大化 0~61 直连编码命中率
+- 低音跌落至负值时上修（`encT` 减小下移幅度）
+- 高音超过 61 **不修剪**——超出的音使用扩展编码（`0xFF` + note），多 1 字节成本
 
-若 voice 阶段 centroid 异常低（< 30），encoding 会上移，但此时 voice 阶段已确保低音 ≥ lowerBound，上移不会导致高音越界。
+#### 2.6.4 完整示例
 
-#### 2.6.4 最终效果
-
-```
-encodedNote = originalNote + TotalTranspose
-                   = originalNote + voiceTranspose + encodingTranspose
-```
-
-播放器还原：
+欢乐颂（centroid=63, range=47~79, voiceCenterNote=60, bounds=[0,127]）：
 
 ```
-originalNote = encodedNote - TotalTranspose
+Stage 1: voiceT = 60 - 63 = -3  →  after: centroid=60, range=[44,76]   (全部入界)
+Stage 2: encT   = 30 - 60 = -30 →  after: centroid=30, range=[14,46]   (全部直连)
+─────────────────────────────────────────────────
+TotalT  = -3 + (-30) = -33  →  编码后 centroid=30, range=[14,46]
 ```
+
+播放器还原：`note - (-33) = note + 33` → 回调收到原始音高 47~79。
+
+若 voiceCenterNote=48：
+
+```
+Stage 1: voiceT = 48 - 63 = -15 → after: centroid=48, range=[32,64]
+Stage 2: encT   = 30 - 48 = -18 → after: centroid=30, range=[14,46]   (全部直连, 同 vc=60)
+```
+
+`voiceCenterNote` 不同但编码结果相同——因为 Stage 2 始终拉向 30，抵消了 Stage 1 的 centering 差异。
+
+#### 2.6.5 手动移调
+
+当 `--useExtraTranspose` 启用时，跳过两级自动计算，`TotalTranspose` 直接取用户指定的 `--transpose` 值。
 
 **完整示例**（欢乐颂，voiceCenterNote=60，bounds=[0,127]）：
 
@@ -412,4 +406,4 @@ BE                                                   EOS
 5. **同一 tick 和弦**: 共享 delta，其中 delta=0 用 `0x00` 单字节编码。
 6. **NoteOff velocity**: 若 flags bit1=1，解析器必须跳过该字节，即使不使用其值。这确保流同步。
 7. **默认 velocity**: 未启用 velocity 时 NoteOn 力度默认为 127。
-8. **高音优先**: Voice 移调阶段高音越界整体下移（低音可被牺牲），Encoding 移调阶段不做修剪（见 §2.6.2 和 §2.6.3）。
+8. **两级移调**: Stage 1 夹紧到 [0,127]，Stage 2 拉向 30（仅防低音 < 0，高音超 61 走扩展编码）。详见 §2.6。
