@@ -130,57 +130,41 @@ def getNoteNameValueMap():
 
 def calcTranspose(centroidNote, lowestNote, highestNote,
                   voiceCenterNote, lowerBoundNote, upperBoundNote):
+    """Stage 1 — clamp to [lowerBound, upperBound] while centering on voiceCenterNote.
+    High-note priority when span exceeds bounds."""
 
     voiceTranspose = voiceCenterNote - centroidNote
 
-    afterTransposeHighest = highestNote + voiceTranspose
-    afterTransposeLowest = lowestNote + voiceTranspose
+    # Clamp to [lowerBound, upperBound], high notes first
+    afterHighest = highestNote + voiceTranspose
+    afterLowest = lowestNote + voiceTranspose
 
-    offsetToValidHighest = upperBoundNote - afterTransposeHighest
-    offsetToValidLowest = lowerBoundNote - afterTransposeLowest
-
-    if offsetToValidHighest >= 0 and offsetToValidLowest <= 0:
-        pass
-    elif offsetToValidHighest < 0:
-        voiceTranspose += offsetToValidHighest
-    elif offsetToValidLowest > 0:
-        voiceTranspose += offsetToValidLowest
+    if afterHighest > upperBoundNote:
+        voiceTranspose += upperBoundNote - afterHighest
+    elif afterLowest < lowerBoundNote:
+        voiceTranspose += lowerBoundNote - afterLowest
 
     return voiceTranspose
 
 
 def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
                           lowerBoundNote, upperBoundNote):
-    """Compute encoding transpose to center notes for optimal SSCR compression.
-    This is purely for compression — NO trimming. All boundary enforcement
-    is handled by calcTranspose (voice stage) before this.
-
-    Returns (encodingTranspose, totalTranspose).
-    """
-
-    centroidAfterVoice = centroidNote + voiceTranspose
-    lowestAfterVoice = lowestNote + voiceTranspose
+    """Stage 2 — aggressive centering to 30 for max direct-range compression.
+    Only guarantees low ≥ 0; high notes may exceed 61 (extended encoding).
+    Stage 1 already ensures all notes in [0, 127], and encoding shifts DOWN
+    (centroid ~60→30), so high end never needs checking.
+    Returns (encodingTranspose, totalTranspose)."""
 
     DIRECT_CENTER = 30
+    centroidAfterVoice = centroidNote + voiceTranspose
 
     encodingTranspose = DIRECT_CENTER - centroidAfterVoice
 
-    # Only catch notes that would go below 0 after encoding shift.
-    # High-end violations can't happen: voice stage ensures high ≤ upperBound
-    # and encoding shifts DOWN (centroid ~60 → 30).
-    afterLowest = lowestAfterVoice + encodingTranspose
-    if afterLowest < lowerBoundNote:
-        encodingTranspose += lowerBoundNote - afterLowest
+    afterLowest = lowestNote + voiceTranspose + encodingTranspose
+    if afterLowest < 0:
+        encodingTranspose += -afterLowest
 
     totalTranspose = voiceTranspose + encodingTranspose
-
-    finalLowest = lowestNote + totalTranspose
-    finalHighest = highestNote + totalTranspose
-    assert lowerBoundNote <= finalLowest <= upperBoundNote, \
-        f'Note {finalLowest} out of range [{lowerBoundNote}, {upperBoundNote}]'
-    assert lowerBoundNote <= finalHighest <= upperBoundNote, \
-        f'Note {finalHighest} out of range [{lowerBoundNote}, {upperBoundNote}]'
-
     return encodingTranspose, totalTranspose
 
 
