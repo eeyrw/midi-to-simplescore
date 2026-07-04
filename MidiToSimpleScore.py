@@ -174,10 +174,17 @@ def calcEncodingTranspose(centroidNote, lowestNote, highestNote, voiceTranspose,
 
     if afterLowest < lowerBoundNote:
         encodingTranspose += lowerBoundNote - afterLowest
-    elif afterHighest > upperBoundNote:
+    if afterHighest > upperBoundNote:
         encodingTranspose += upperBoundNote - afterHighest
 
     totalTranspose = voiceTranspose + encodingTranspose
+
+    finalLowest = lowestNote + totalTranspose
+    finalHighest = highestNote + totalTranspose
+    assert lowerBoundNote <= finalLowest <= upperBoundNote, \
+        f'Note {finalLowest} out of range [{lowerBoundNote}, {upperBoundNote}]'
+    assert lowerBoundNote <= finalHighest <= upperBoundNote, \
+        f'Note {finalHighest} out of range [{lowerBoundNote}, {upperBoundNote}]'
 
     return encodingTranspose, totalTranspose
 
