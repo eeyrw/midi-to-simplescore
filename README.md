@@ -85,7 +85,25 @@ python SSPL_Packer.py *.mid -o playlist.sspl -c playlist_data.c
 
 # 带模板（8051/AVR）
 python SSPL_Packer.py *.mid -o playlist.sspl -c playlist_data.c --template 8051_sdcc
+
+# 手动移调
+python SSPL_Packer.py *.mid -o playlist.sspl --useExtraTranspose --transpose -3
 ```
+
+### SSPL Packer 参数
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `midi_files` | (必选) | 输入 MIDI 文件（多个） |
+| `-o, --output` | `playlist.sspl` | 输出 SSPL 二进制文件 |
+| `-c, --c-output` | — | 输出 C 数组文件路径 |
+| `--template` | — | C 模板名 (`8051_sdcc` / `avr_gcc` / `generic`) |
+| `--voiceCenterNote` | `60` | 目标音域中心音 |
+| `--tickPerSecond` | `125` | 目标设备 tick 频率 |
+| `--includeNoteOnVelocity` | `false` | 保存 NoteOn 力度 |
+| `--includeNoteOffVelocity` | `false` | 保存 NoteOff 力度 |
+| `--useExtraTranspose` | `false` | 启用手动移调（跳过自动 Stage 1） |
+| `--transpose` | `0` | 手动移调半音数，需配合 `--useExtraTranspose` |
 
 生成的 C 头文件包含完整元信息注释（原始音域、乐器移调、编码移调、编码后音域）。
 

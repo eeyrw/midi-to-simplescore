@@ -28,7 +28,8 @@ SSPL_ENTRY_SIZE = 8
 
 def build_sspl(midi_files, voiceCenterNote=60, lowerBoundNote=0,
                upperBoundNote=127, tickPerSecond=125,
-               includeNoteOnVelocity=False, includeNoteOffVelocity=False):
+               includeNoteOnVelocity=False, includeNoteOffVelocity=False,
+               useExtraTranspose=False, extraTranspose=0):
     """Convert MIDI files to SSCR, pack into SSPL binary.
     Returns (sspl_bytes, entry_info_list).
     """
@@ -40,8 +41,11 @@ def build_sspl(midi_files, voiceCenterNote=60, lowerBoundNote=0,
         noteOnList = readMidiFile(path)
         centroid, lowest, highest = analyzeNoteList(noteOnList)
 
-        voiceTranspose = calcTranspose(centroid, lowest, highest,
-                                       voiceCenterNote, lowerBoundNote, upperBoundNote)
+        if not useExtraTranspose:
+            voiceTranspose = calcTranspose(centroid, lowest, highest,
+                                           voiceCenterNote, lowerBoundNote, upperBoundNote)
+        else:
+            voiceTranspose = extraTranspose
 
         afterVoiceCentroid = centroid + voiceTranspose
         afterVoiceLowest   = lowest  + voiceTranspose
@@ -247,6 +251,10 @@ def main():
     parser.add_argument('--tickPerSecond', type=int, default=125)
     parser.add_argument('--includeNoteOnVelocity', action='store_true')
     parser.add_argument('--includeNoteOffVelocity', action='store_true')
+    parser.add_argument('--useExtraTranspose', action='store_true',
+                        help='Use manual transpose value instead of auto-calculated.')
+    parser.add_argument('--transpose', type=int, default=0,
+                        help='Manual transpose in half notes (requires --useExtraTranspose).')
     args = parser.parse_args()
 
     sspl_data, info = build_sspl(
@@ -255,6 +263,8 @@ def main():
         tickPerSecond=args.tickPerSecond,
         includeNoteOnVelocity=args.includeNoteOnVelocity,
         includeNoteOffVelocity=args.includeNoteOffVelocity,
+        useExtraTranspose=args.useExtraTranspose,
+        extraTranspose=args.transpose,
     )
 
     # Binary output
